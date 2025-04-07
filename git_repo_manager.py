@@ -1,3 +1,11 @@
+"""Git Repo Manager - A command-line tool to manage multiple Git repositories
+in parallel.
+
+This tool allows you to scan for Git repositories in a directory, list them,
+execute Git commands in all repositories, and manage their branches.
+It uses Python's cmd2 library for a user-friendly command-line interface
+"""
+
 import os
 import subprocess
 from argparse import ArgumentParser
@@ -15,7 +23,7 @@ class GitRepoManager(cmd2.Cmd):
         super().__init__(
             allow_cli_args=False,
             persistent_history_file="~/.gitrepomanager_history",
-            startup_script="~/.gitrepomanagerrc",
+            # startup_script="~/.gitrepomanagerrc",
         )
         self.intro = "Git Repo Manager - Type 'help' for available commands"
         self.prompt = "git-mgr> "
@@ -73,7 +81,7 @@ class GitRepoManager(cmd2.Cmd):
 
     @with_argparser(scan_parser)
     @with_category("discovery")
-    def do_scan(self, args):
+    def do_scan(self, args=""):
         """Scan for Git repositories in the specified directory or current
         directory.
         """
@@ -103,7 +111,7 @@ class GitRepoManager(cmd2.Cmd):
 
     # Command: list
     @with_category("discovery")
-    def do_list(self, _=None):
+    def do_list(self, _=""):
         """List all discovered Git repositories and their current branches."""
         if not self.repos:
             self.poutput("No repositories found. Use 'scan' to discover repositories.")
@@ -151,7 +159,7 @@ class GitRepoManager(cmd2.Cmd):
 
     @with_argparser(verbose_parser)
     @with_category("configuration")
-    def do_verbose(self, args):
+    def do_verbose(self, args=""):
         """Toggle verbose output (show all command results, not just errors)."""
         if args.state:
             self.verbose = args.state == "on"
@@ -163,7 +171,9 @@ class GitRepoManager(cmd2.Cmd):
     # Command: threads
     threads_parser = ArgumentParser()
     threads_parser.add_argument(
-        "num", type=int, help="Number of threads to use for parallel execution"
+        "num",
+        type=int,
+        help="Number of threads to use for parallel execution",
     )
 
     @with_argparser(threads_parser)
@@ -177,9 +187,79 @@ class GitRepoManager(cmd2.Cmd):
         self.threads = args.num
         self.poutput(f"Using {self.threads} threads for parallel execution")
 
-    def do_exit(self, _=None):
+    def do_exit(self, _=""):
         """Exit this application."""
         return self.do_quit("")
+
+    def _get_default_branch(self, repo_path: str) -> str:
+        """Determine the default branch for a repository."""
+        try:
+            # First try to get the default branch from remote
+            result = subprocess.run(
+                ["git", "remote", "show", "origin"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            # Parse the output to find the default branch
+            for line in result.stdout.splitlines():
+                if "HEAD branch" in line:
+                    return line.split(":")[-1].strip()
+
+            # Fallback to checking for common branch names
+            branches = subprocess.run(
+                ["git", "branch", "-a"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+
+            if "main" in branches:
+                return "main"
+            elif "master" in branches:
+                return "master"
+
+            return "unknown"
+        except subprocess.CalledProcessError:
+            return "unknown"
+
+    # Command: branch_switch_default
+    @with_category("execution")
+    def do_branch_switch_default(self, _=""):
+        """Switch all repositories to their default branch (main/master)."""
+        if not self.repos:
+            self.perror("No repositories found. Use 'scan' to discover repositories.")
+            return
+
+        self.poutput(
+            f"Switching to default branches in {len(self.repos)} repositories..."
+        )
+
+        with ThreadPoolExecutor(max_workers=self.threads) as executor:
+            # First get default branches for all repos
+            default_branches = list(
+                executor.map(
+                    lambda repo: (repo, self._get_default_branch(repo)),
+                    self.repos.keys(),
+                )
+            )
+
+            # Then switch to those branches
+            results = list(
+                executor.map(
+                    lambda repo_branch: self._execute_git_command(
+                        repo_branch[0], f"checkout {repo_branch[1]}"
+                    ),
+                    default_branches,
+                )
+            )
+
+        self._print_results(results)
+        # Update our branch cache
+        for repo_path in self.repos:
+            self.repos[repo_path] = self._get_current_branch(repo_path)
 
 
 if __name__ == "__main__":
