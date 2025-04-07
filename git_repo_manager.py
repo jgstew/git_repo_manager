@@ -218,7 +218,7 @@ class GitRepoManager(cmd2.Cmd):
 
             if "main" in branches:
                 return "main"
-            elif "master" in branches:
+            if "master" in branches:
                 return "master"
 
             return "unknown"

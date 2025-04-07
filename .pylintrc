@@ -1,5 +1,5 @@
 [MESSAGES CONTROL]
-disable = invalid-name, c-extension-no-member, cyclic-import, unused-argument, line-too-long, R0801, import-error
+disable = c-extension-no-member, import-error, consider-iterating-dictionary
 
 [format]
 max-line-length = 88
