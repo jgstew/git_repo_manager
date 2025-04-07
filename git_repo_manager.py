@@ -163,6 +163,10 @@ class GitRepoManager(cmd2.Cmd):
         self.threads = args.num
         self.poutput(f"Using {self.threads} threads for parallel execution")
 
+    def do_exit(self, _=None):
+        """Exit this application."""
+        return self.do_quit("")
+    
 if __name__ == '__main__':
     app = GitRepoManager()
     app.cmdloop()
