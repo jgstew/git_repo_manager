@@ -7,6 +7,7 @@ It uses Python's cmd2 library for a user-friendly command-line interface
 """
 
 import os
+import shlex
 import subprocess
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
@@ -56,7 +57,7 @@ class GitRepoManager(cmd2.Cmd):
         """Execute a Git command in a repository and return the output."""
         try:
             result = subprocess.run(
-                ["git"] + command.split(),
+                ["git"] + shlex.split(command),
                 cwd=repo_path,
                 capture_output=True,
                 text=True,
@@ -127,18 +128,14 @@ class GitRepoManager(cmd2.Cmd):
             self.poutput(f"{os.path.basename(path):<{max_path_len}}  {branch}")
 
     # Command: git
-    run_parser = ArgumentParser()
-    run_parser.add_argument("command", nargs="+", help="Git command to execute")
-
-    @with_argparser(run_parser)
     @with_category("execution")
-    def do_git(self, args):
+    def do_git(self, statement=""):
         """Execute a Git command in all repositories."""
         if not self.repos:
             self.perror("No repositories found. Use 'scan' to discover repositories.")
             return
 
-        command = " ".join(args.command)
+        command = statement.raw.split(" ", 1)[1] if statement else ""
         self.poutput(f"Executing 'git {command}' in {len(self.repos)} repositories...")
 
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
