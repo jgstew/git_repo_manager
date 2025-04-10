@@ -129,13 +129,17 @@ class GitRepoManager(cmd2.Cmd):
 
     # Command: git
     @with_category("execution")
-    def do_git(self, statement=""):
+    def do_git(self, statement="git help"):
         """Execute a Git command in all repositories."""
         if not self.repos:
             self.perror("No repositories found. Use 'scan' to discover repositories.")
             return
 
-        command = statement.raw.split(" ", 1)[1] if statement else ""
+        if isinstance(statement, cmd2.Statement):
+            command = statement.raw.split(" ", 1)[1]
+        else:
+            command = statement.split(" ", 1)[1]
+
         self.poutput(f"Executing 'git {command}' in {len(self.repos)} repositories...")
 
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
@@ -147,6 +151,14 @@ class GitRepoManager(cmd2.Cmd):
             )
 
         self._print_results(results)
+
+    def default(self, statement):
+        """If unknown command, send it as if it started with git."""
+
+        # save entered item to history:
+        self.history.append(statement)
+
+        self.do_git("git " + statement.raw)
 
     # Command: verbose
     verbose_parser = ArgumentParser()
